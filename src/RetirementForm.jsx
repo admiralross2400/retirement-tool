@@ -25,11 +25,11 @@ export default function RetirementForm() {
   };
 
   const fundData = {
-    "Future Advantage 1": { return: 0.02, volatility: 0.05 },
+    "Future Advantage 1": { return: 0.025, volatility: 0.05 },
     "Future Advantage 2": { return: 0.03, volatility: 0.0556 },
     "Future Advantage 3": { return: 0.035, volatility: 0.0799 },
-    "Future Advantage 4": { return: 0.04, volatility: 0.1151 },
-    "Future Advantage 5": { return: 0.045, volatility: 0.1464 },
+    "Future Advantage 4": { return: 0.045, volatility: 0.1151 },
+    "Future Advantage 5": { return: 0.053, volatility: 0.1464 },
   };
 
   const STATE_PENSION_ANNUAL = 11960;
@@ -150,7 +150,7 @@ export default function RetirementForm() {
     let currentYearWithdrawals = 0;
 
     while (potLowRisk + potSecondFund + potThirdFund > 0 && months < maxMonths) {
-      let withdrawal = potLowRisk * drawdownRate;
+      let withdrawal = (potLowRisk + potSecondFund + potThirdFund) * drawdownRate;
       withdrawal = Math.min(withdrawal, potLowRisk);
       potLowRisk -= withdrawal;
       currentYearWithdrawals += withdrawal;
@@ -456,7 +456,45 @@ export default function RetirementForm() {
           </label>
         </div>
       </div>
-
+      <div className="mt-6 border-t pt-4">
+  <h3 className="text-xl font-semibold mb-2">Fund Return Assumptions</h3>
+  <table className="w-full border">
+    <thead>
+      <tr>
+        <th className="border p-2">Fund</th>
+        <th className="border p-2">Annual Return (%)</th>
+        <th className="border p-2">Volatility (%)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td className="border p-2">Future Advantage 1</td>
+        <td className="border p-2">2.5%</td>
+        <td className="border p-2">5.0%</td>
+      </tr>
+      <tr>
+        <td className="border p-2">Future Advantage 2</td>
+        <td className="border p-2">3.0%</td>
+        <td className="border p-2">5.6%</td>
+      </tr>
+      <tr>
+        <td className="border p-2">Future Advantage 3</td>
+        <td className="border p-2">3.6%</td>
+        <td className="border p-2">8.0%</td>
+      </tr>
+      <tr>
+        <td className="border p-2">Future Advantage 4</td>
+        <td className="border p-2">4.5%</td>
+        <td className="border p-2">11.5%</td>
+      </tr>
+      <tr>
+        <td className="border p-2">Future Advantage 5</td>
+        <td className="border p-2">5.3%</td>
+        <td className="border p-2">14.6%</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
       <button onClick={handleCalculate} className="w-full p-2 mt-4 bg-blue-500 text-white rounded">
         Run Simulation
       </button>
