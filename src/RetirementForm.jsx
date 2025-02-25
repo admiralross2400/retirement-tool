@@ -20,7 +20,8 @@ export default function RetirementForm() {
     drawdownFixed: "",
     drawdownInitialPotPercentage: "",
     inflationRate: "",
-    includeStatePension: "Yes", // New option: "Yes" or "No"
+    includeStatePension: "Yes - Standard", // Updated to three options
+    customStatePensionAnnual: "", // New field for custom annual amount
   });
 
   // State to track validation errors
@@ -57,14 +58,14 @@ export default function RetirementForm() {
     "Future Advantage 5": { return: 0.053, volatility: 0.1464 },
   };
 
-  // Initial state pension values (will be adjusted by inflation in decumulation if included)
-  const BASE_STATE_PENSION_ANNUAL = 11960;
-  const BASE_STATE_PENSION_MONTHLY = BASE_STATE_PENSION_ANNUAL / 12; // £996.67
+  // Standard state pension values (used for "Yes - Standard")
+  const STANDARD_STATE_PENSION_ANNUAL = 11960;
+  const STANDARD_STATE_PENSION_MONTHLY = STANDARD_STATE_PENSION_ANNUAL / 12; // £996.67
 
   // Validates all inputs before running simulation
   const validateInputs = () => {
     const newErrors = {};
-    const { age, salary, currentPot, contributionRate, retirementAge, drawdownType, drawdownPercentage, drawdownFixed, drawdownInitialPotPercentage, ageToLowRiskFund, inflationRate, numFunds, funds } = formData;
+    const { age, salary, currentPot, contributionRate, retirementAge, drawdownType, drawdownPercentage, drawdownFixed, drawdownInitialPotPercentage, ageToLowRiskFund, inflationRate, numFunds, funds, includeStatePension, customStatePensionAnnual } = formData;
     const fields = [
       { name: "age", label: "Current Age", value: age },
       { name: "salary", label: "Salary", value: salary },
@@ -76,6 +77,7 @@ export default function RetirementForm() {
       { name: "numFunds", label: "Number of Funds", value: numFunds },
     ];
 
+    // Add drawdown-specific field based on type
     if (drawdownType === "percentage") {
       fields.push({ name: "drawdownPercentage", label: "Drawdown Percentage", value: drawdownPercentage });
     } else if (drawdownType === "fixed") {
@@ -84,6 +86,12 @@ export default function RetirementForm() {
       fields.push({ name: "drawdownInitialPotPercentage", label: "Initial Pot Drawdown Percentage", value: drawdownInitialPotPercentage });
     }
 
+    // Add custom state pension field if "Yes - Custom" is selected
+    if (includeStatePension === "Yes - Custom") {
+      fields.push({ name: "customStatePensionAnnual", label: "Custom State Pension Annual Amount", value: customStatePensionAnnual });
+    }
+
+    // Check for valid numbers
     for (const field of fields) {
       if (!field.value || isNaN(parseFloat(field.value))) {
         newErrors[field.name] = `${field.label} must be a valid number.`;
@@ -95,6 +103,7 @@ export default function RetirementForm() {
       return false;
     }
 
+    // Parse values for further validation
     const parsedAge = parseInt(age);
     const parsedRetirementAge = parseInt(retirementAge);
     const parsedSalary = parseFloat(salary);
@@ -106,7 +115,9 @@ export default function RetirementForm() {
     const parsedAgeToLowRiskFund = parseInt(ageToLowRiskFund);
     const parsedInflationRate = parseFloat(inflationRate);
     const parsedNumFunds = parseInt(numFunds);
+    const parsedCustomStatePensionAnnual = parseFloat(customStatePensionAnnual);
 
+    // Range and logic checks
     if (parsedAge <= 0) newErrors.age = "Current Age must be positive.";
     if (parsedRetirementAge <= parsedAge) newErrors.retirementAge = "Retirement Age must be greater than Current Age.";
     if (parsedSalary <= 0) newErrors.salary = "Salary must be positive.";
@@ -125,6 +136,8 @@ export default function RetirementForm() {
       newErrors.inflationRate = "Inflation Rate must be between 0% and 20%.";
     if (parsedNumFunds < 1 || parsedNumFunds > 5)
       newErrors.numFunds = "Number of Funds must be between 1 and 5.";
+    if (includeStatePension === "Yes - Custom" && parsedCustomStatePensionAnnual <= 0)
+      newErrors.customStatePensionAnnual = "Custom State Pension Annual Amount must be positive.";
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
@@ -191,7 +204,7 @@ export default function RetirementForm() {
     const inflationRate = parseFloat(formData.inflationRate) / 100;
     const switchAge = parseInt(formData.ageToLowRiskFund);
     const retirementAge = parseInt(formData.retirementAge);
-    const includeStatePension = formData.includeStatePension === "Yes"; // Determine if state pension is included
+    const includeStatePension = formData.includeStatePension; // "No", "Yes - Standard", or "Yes - Custom"
     const maxMonths = (100 - retirementAge) * 12;
     let age = retirementAge;
     let months = 0;
@@ -200,9 +213,11 @@ export default function RetirementForm() {
     let currentYearWithdrawals = 0;
     let movedFunds = Array(numFunds - 1).fill(false);
     let currentDrawdownFixed = baseDrawdownFixed;
-    // Start state pension at base value if included, otherwise 0
-    let currentStatePensionMonthly = includeStatePension ? BASE_STATE_PENSION_MONTHLY : 0;
-    let currentStatePensionAnnual = includeStatePension ? BASE_STATE_PENSION_ANNUAL : 0;
+    // Set initial state pension based on selection
+    let currentStatePensionAnnual = includeStatePension === "Yes - Standard" ? STANDARD_STATE_PENSION_ANNUAL 
+      : includeStatePension === "Yes - Custom" ? parseFloat(formData.customStatePensionAnnual) 
+      : 0;
+    let currentStatePensionMonthly = currentStatePensionAnnual / 12;
     let statePensionMonthlyValues = [];
     let statePensionAnnualValues = [];
 
@@ -252,8 +267,8 @@ export default function RetirementForm() {
         if (formData.drawdownType === "fixed" || formData.drawdownType === "initialPot") {
           currentDrawdownFixed *= (1 + inflationRate);
         }
-        // Only adjust state pension if included
-        if (includeStatePension) {
+        // Apply inflation to state pension if included
+        if (includeStatePension !== "No") {
           currentStatePensionMonthly *= (1 + inflationRate);
           currentStatePensionAnnual *= (1 + inflationRate);
         }
@@ -608,10 +623,24 @@ export default function RetirementForm() {
               onChange={handleChange}
               className="w-full p-2 border rounded"
             >
-              <option value="Yes">Yes</option>
               <option value="No">No</option>
+              <option value="Yes - Standard">Yes - Standard</option>
+              <option value="Yes - Custom">Yes - Custom</option>
             </select>
           </label>
+          {formData.includeStatePension === "Yes - Custom" && (
+            <label className="block">
+              Custom State Pension Annual Amount (£):
+              <input
+                type="number"
+                name="customStatePensionAnnual"
+                value={formData.customStatePensionAnnual}
+                onChange={handleChange}
+                className="w-full p-2 border rounded"
+              />
+              {errors.customStatePensionAnnual && <p className="text-red-500 text-sm mt-1">{errors.customStatePensionAnnual}</p>}
+            </label>
+          )}
         </div>
       </div>
       <div className="mt-6 border-t pt-4">
@@ -702,9 +731,11 @@ export default function RetirementForm() {
         <div className="mt-8">
           <h3 className="text-xl font-semibold mb-4">Monthly Income in Retirement</h3>
           <p className="text-sm mb-2">
-            {formData.includeStatePension === "Yes" 
-              ? `Note: State Pension starts at £${BASE_STATE_PENSION_ANNUAL.toLocaleString("en-US")} per year (£${BASE_STATE_PENSION_MONTHLY.toFixed(2)} per month) and increases with inflation.`
-              : "Note: State Pension is excluded."}
+            {formData.includeStatePension === "No" 
+              ? "Note: State Pension is excluded."
+              : formData.includeStatePension === "Yes - Standard"
+              ? `Note: State Pension starts at £${STANDARD_STATE_PENSION_ANNUAL.toLocaleString("en-US")} per year (£${STANDARD_STATE_PENSION_MONTHLY.toFixed(2)} per month) and increases with inflation.`
+              : `Note: State Pension starts at £${parseFloat(formData.customStatePensionAnnual).toLocaleString("en-US")} per year (£${(parseFloat(formData.customStatePensionAnnual) / 12).toFixed(2)} per month) and increases with inflation.`}
           </p>
           <Line
             data={monthlyIncomeChartData}
@@ -717,9 +748,11 @@ export default function RetirementForm() {
         <div className="mt-8">
           <h3 className="text-xl font-semibold mb-4">Annual Income in Retirement</h3>
           <p className="text-sm mb-2">
-            {formData.includeStatePension === "Yes" 
-              ? `Note: State Pension starts at £${BASE_STATE_PENSION_ANNUAL.toLocaleString("en-US")} per year and increases with inflation.`
-              : "Note: State Pension is excluded."}
+            {formData.includeStatePension === "No" 
+              ? "Note: State Pension is excluded."
+              : formData.includeStatePension === "Yes - Standard"
+              ? `Note: State Pension starts at £${STANDARD_STATE_PENSION_ANNUAL.toLocaleString("en-US")} per year and increases with inflation.`
+              : `Note: State Pension starts at £${parseFloat(formData.customStatePensionAnnual).toLocaleString("en-US")} per year and increases with inflation.`}
           </p>
           <Line
             data={annualIncomeChartData}
