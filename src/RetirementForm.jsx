@@ -6,20 +6,20 @@ import "chart.js/auto";
 export default function RetirementForm() {
   // Initial state with all inputs and defaults
   const [formData, setFormData] = useState({
-    ageToLowRiskFund: "", // Age to consolidate all funds into low-risk
-    numFunds: "3", // Number of funds in decumulation (1-5), defaults to 3
-    funds: ["Future Advantage 1", "Future Advantage 3", "Future Advantage 5"], // Array of selected funds
-    age: "", // Current age of the user
-    salary: "", // Starting salary
-    currentPot: "", // Initial retirement pot value
-    contributionRate: "", // Percentage of salary contributed annually
-    retirementAge: "", // Age at which user retires
-    fundSelection: "Future Advantage 5", // Fund used during accumulation
-    drawdownType: "percentage", // Type of withdrawal: percentage, fixed, or initialPot
-    drawdownPercentage: "", // Percentage for percentage-based drawdown
-    drawdownFixed: "", // Fixed monthly amount for fixed drawdown
-    drawdownInitialPotPercentage: "", // Percentage of initial pot for initialPot drawdown
-    inflationRate: "", // Annual inflation rate
+    ageToLowRiskFund: "",
+    numFunds: "3",
+    funds: ["Future Advantage 1", "Future Advantage 3", "Future Advantage 5"],
+    age: "",
+    salary: "",
+    currentPot: "",
+    contributionRate: "",
+    retirementAge: "",
+    fundSelection: "Future Advantage 5",
+    drawdownType: "percentage",
+    drawdownPercentage: "",
+    drawdownFixed: "",
+    drawdownInitialPotPercentage: "",
+    inflationRate: "",
   });
 
   // State to track validation errors
@@ -56,15 +56,14 @@ export default function RetirementForm() {
     "Future Advantage 5": { return: 0.053, volatility: 0.1464 },
   };
 
-  // Constants for state pension (assumed fixed, not inflation-adjusted here)
-  const STATE_PENSION_ANNUAL = 11960;
-  const STATE_PENSION_MONTHLY = STATE_PENSION_ANNUAL / 12; // £996.67
+  // Initial state pension values (will be adjusted by inflation in decumulation)
+  const BASE_STATE_PENSION_ANNUAL = 11960;
+  const BASE_STATE_PENSION_MONTHLY = BASE_STATE_PENSION_ANNUAL / 12; // £996.67
 
   // Validates all inputs before running simulation
   const validateInputs = () => {
     const newErrors = {};
     const { age, salary, currentPot, contributionRate, retirementAge, drawdownType, drawdownPercentage, drawdownFixed, drawdownInitialPotPercentage, ageToLowRiskFund, inflationRate, numFunds, funds } = formData;
-    // List of fields to validate
     const fields = [
       { name: "age", label: "Current Age", value: age },
       { name: "salary", label: "Salary", value: salary },
@@ -76,7 +75,6 @@ export default function RetirementForm() {
       { name: "numFunds", label: "Number of Funds", value: numFunds },
     ];
 
-    // Add drawdown-specific field based on type
     if (drawdownType === "percentage") {
       fields.push({ name: "drawdownPercentage", label: "Drawdown Percentage", value: drawdownPercentage });
     } else if (drawdownType === "fixed") {
@@ -85,7 +83,6 @@ export default function RetirementForm() {
       fields.push({ name: "drawdownInitialPotPercentage", label: "Initial Pot Drawdown Percentage", value: drawdownInitialPotPercentage });
     }
 
-    // Check for valid numbers
     for (const field of fields) {
       if (!field.value || isNaN(parseFloat(field.value))) {
         newErrors[field.name] = `${field.label} must be a valid number.`;
@@ -97,7 +94,6 @@ export default function RetirementForm() {
       return false;
     }
 
-    // Parse values for further validation
     const parsedAge = parseInt(age);
     const parsedRetirementAge = parseInt(retirementAge);
     const parsedSalary = parseFloat(salary);
@@ -110,7 +106,6 @@ export default function RetirementForm() {
     const parsedInflationRate = parseFloat(inflationRate);
     const parsedNumFunds = parseInt(numFunds);
 
-    // Range and logic checks
     if (parsedAge <= 0) newErrors.age = "Current Age must be positive.";
     if (parsedRetirementAge <= parsedAge) newErrors.retirementAge = "Retirement Age must be greater than Current Age.";
     if (parsedSalary <= 0) newErrors.salary = "Salary must be positive.";
@@ -143,7 +138,7 @@ export default function RetirementForm() {
   const simulateAccumulation = () => {
     const { return: meanReturn, volatility } = fundData[formData.fundSelection];
     const years = formData.retirementAge - formData.age;
-    const simulations = 1000; // Number of Monte Carlo simulations
+    const simulations = 1000;
     const results = [];
     const inflationRate = parseFloat(formData.inflationRate) / 100;
 
@@ -153,18 +148,16 @@ export default function RetirementForm() {
       let contributionRate = parseFloat(formData.contributionRate) / 100;
       let yearlyBalances = [];
 
-      // Simulate each year until retirement
       for (let year = 0; year < years; year++) {
         let contribution = salary * contributionRate;
-        let annualReturn = meanReturn + volatility * (Math.random() * 2 - 1); // Random return within volatility
+        let annualReturn = meanReturn + volatility * (Math.random() * 2 - 1);
         pot = (pot + contribution) * (1 + annualReturn);
         yearlyBalances.push(pot);
-        salary *= (1 + inflationRate); // Apply inflation to salary
+        salary *= (1 + inflationRate);
       }
       results.push(yearlyBalances);
     }
 
-    // Calculate percentiles for each year
     const percentiles = Array.from({ length: years }, (_, i) =>
       results.map((run) => run[i]).sort((a, b) => a - b)
     );
@@ -183,14 +176,13 @@ export default function RetirementForm() {
 
   // Simulates the decumulation phase after retirement
   const simulateDecumulation = (startingPot) => {
-    // Return minimal data if starting pot is invalid
     if (!startingPot || isNaN(startingPot) || startingPot <= 0) 
-      return { funds: [Array(12).fill(0)], withdrawals: [0], annualWithdrawals: [0] };
+      return { funds: [Array(12).fill(0)], withdrawals: [0], annualWithdrawals: [0], statePensionMonthlyValues: [0], statePensionAnnualValues: [0] };
 
     const numFunds = parseInt(formData.numFunds);
-    const pots = Array(numFunds).fill(startingPot / numFunds); // Split pot evenly across funds
-    const returns = formData.funds.map(fund => fundData[fund].return / 12); // Monthly returns
-    const fundBalances = Array(numFunds).fill([]).map(() => []); // Track balances for each fund
+    const pots = Array(numFunds).fill(startingPot / numFunds);
+    const returns = formData.funds.map(fund => fundData[fund].return / 12);
+    const fundBalances = Array(numFunds).fill([]).map(() => []);
 
     const drawdownRate = formData.drawdownType === "percentage" ? parseFloat(formData.drawdownPercentage) / 100 / 12 : 0;
     let baseDrawdownFixed = formData.drawdownType === "fixed" ? parseFloat(formData.drawdownFixed) 
@@ -204,24 +196,25 @@ export default function RetirementForm() {
     let withdrawals = [];
     let annualWithdrawals = [];
     let currentYearWithdrawals = 0;
-    let movedFunds = Array(numFunds - 1).fill(false); // Flags for each fund moved into low-risk
+    let movedFunds = Array(numFunds - 1).fill(false);
     let currentDrawdownFixed = baseDrawdownFixed;
+    let currentStatePensionMonthly = BASE_STATE_PENSION_MONTHLY;
+    let currentStatePensionAnnual = BASE_STATE_PENSION_ANNUAL;
+    let statePensionMonthlyValues = [];
+    let statePensionAnnualValues = [];
 
-    // Run monthly simulation until pot depletes or max age reached
     while (pots.reduce((sum, pot) => sum + pot, 0) > 0 && months < maxMonths) {
       let withdrawal = formData.drawdownType === "percentage" 
         ? pots.reduce((sum, pot) => sum + pot, 0) * drawdownRate 
         : currentDrawdownFixed;
-      withdrawal = Math.min(withdrawal, pots[0]); // Cap withdrawal at available low-risk fund
+      withdrawal = Math.min(withdrawal, pots[0]);
       pots[0] -= withdrawal;
       currentYearWithdrawals += withdrawal;
 
-      // Apply monthly returns to all funds
       for (let i = 0; i < numFunds; i++) {
         pots[i] = Math.max(0, pots[i] * (1 + returns[i]));
       }
 
-      // Rebalance active funds annually
       if (months % 12 === 11) {
         const activeFunds = pots.filter(pot => pot > 0).length;
         if (activeFunds > 1) {
@@ -233,17 +226,15 @@ export default function RetirementForm() {
         }
       }
 
-      // Move funds sequentially when low-risk fund falls below 12 months of withdrawal
       for (let i = 0; i < numFunds - 1; i++) {
         if (pots[0] < withdrawal * 12 && !movedFunds[i] && pots[i + 1] > 0) {
           pots[0] += pots[i + 1];
           pots[i + 1] = 0;
           movedFunds[i] = true;
-          break; // Move one fund at a time
+          break;
         }
       }
 
-      // Force all funds into low-risk if switch age is reached
       if (age >= switchAge && pots.slice(1).some(pot => pot > 0)) {
         const totalRemaining = pots.slice(1).reduce((sum, pot) => sum + pot, 0);
         pots[0] += totalRemaining;
@@ -251,20 +242,22 @@ export default function RetirementForm() {
         movedFunds.fill(true);
       }
 
-      // Aggregate withdrawals annually and adjust fixed drawdown for inflation
       if (months % 12 === 11) {
         annualWithdrawals.push(currentYearWithdrawals);
+        statePensionAnnualValues.push(currentStatePensionAnnual);
         currentYearWithdrawals = 0;
         if (formData.drawdownType === "fixed" || formData.drawdownType === "initialPot") {
           currentDrawdownFixed *= (1 + inflationRate);
         }
+        currentStatePensionMonthly *= (1 + inflationRate);
+        currentStatePensionAnnual *= (1 + inflationRate);
       }
 
-      // Store current balances for charting
       for (let i = 0; i < numFunds; i++) {
         fundBalances[i].push(pots[i]);
       }
       withdrawals.push(withdrawal);
+      statePensionMonthlyValues.push(currentStatePensionMonthly);
 
       if (pots.reduce((sum, pot) => sum + pot, 0) < 1) {
         if (currentYearWithdrawals > 0) annualWithdrawals.push(currentYearWithdrawals);
@@ -275,14 +268,13 @@ export default function RetirementForm() {
       age = retirementAge + Math.floor(months / 12);
     }
 
-    return { funds: fundBalances, withdrawals, annualWithdrawals };
+    return { funds: fundBalances, withdrawals, annualWithdrawals, statePensionMonthlyValues, statePensionAnnualValues };
   };
 
   // Runs simulations and updates charts
   const handleCalculate = () => {
     if (!validateInputs()) return;
 
-    // Accumulation simulation
     const { p25, p50, p75 } = simulateAccumulation();
     const accumulationLabels = Array.from(
       { length: p50.length },
@@ -303,20 +295,18 @@ export default function RetirementForm() {
       p75: p75[p75.length - 1],
     });
 
-    // Decumulation simulation
     const decumulationResults = simulateDecumulation(p50[p50.length - 1]);
     const decumulationLabels = Array.from(
       { length: decumulationResults.funds[0].length },
       (_, i) => parseInt(formData.retirementAge) + Math.floor(i / 12)
     );
     const colors = [
-      { background: "rgba(128, 0, 128, 0.5)", border: "purple" }, // Fund 1
-      { background: "rgba(255, 165, 0, 0.5)", border: "orange" }, // Fund 2
-      { background: "rgba(0, 128, 128, 0.5)", border: "teal" },   // Fund 3
-      { background: "rgba(255, 0, 0, 0.5)", border: "red" },      // Fund 4
-      { background: "rgba(0, 255, 0, 0.5)", border: "green" },    // Fund 5
+      { background: "rgba(128, 0, 128, 0.5)", border: "purple" },
+      { background: "rgba(255, 165, 0, 0.5)", border: "orange" },
+      { background: "rgba(0, 128, 128, 0.5)", border: "teal" },
+      { background: "rgba(255, 0, 0, 0.5)", border: "red" },
+      { background: "rgba(0, 255, 0, 0.5)", border: "green" },
     ];
-    // Dynamically generate datasets for all selected funds
     setDecumulationChartData({
       labels: decumulationLabels,
       datasets: Array.from({ length: parseInt(formData.numFunds) }, (_, i) => ({
@@ -326,9 +316,26 @@ export default function RetirementForm() {
         borderColor: colors[i].border,
         fill: true,
       })),
+      options: {
+        scales: {
+          x: {
+            title: { display: true, text: "Age" },
+            ticks: {
+              callback: function(value, index, values) {
+                // Show only the first label of each year (every 12 months)
+                return index % 12 === 0 ? decumulationLabels[index] : '';
+              },
+            },
+          },
+          y: { title: { display: true, text: "Pot Value (£)" }, stacked: true },
+        },
+        plugins: {
+          legend: { display: true },
+          tooltip: { mode: "index", intersect: false },
+        },
+      },
     });
 
-    // Monthly income chart
     const monthlyIncomeLabels = Array.from(
       { length: decumulationResults.withdrawals.length },
       (_, i) => parseInt(formData.retirementAge) + Math.floor(i / 12)
@@ -338,7 +345,7 @@ export default function RetirementForm() {
       datasets: [
         {
           label: "State Pension",
-          data: Array(decumulationResults.withdrawals.length).fill(STATE_PENSION_MONTHLY),
+          data: decumulationResults.statePensionMonthlyValues,
           backgroundColor: "rgba(0, 255, 0, 0.5)",
           borderColor: "green",
           fill: true,
@@ -351,9 +358,26 @@ export default function RetirementForm() {
           fill: true,
         },
       ],
+      options: {
+        scales: {
+          x: {
+            title: { display: true, text: "Age" },
+            ticks: {
+              callback: function(value, index, values) {
+                // Show only the first label of each year (every 12 months)
+                return index % 12 === 0 ? monthlyIncomeLabels[index] : '';
+              },
+            },
+          },
+          y: { title: { display: true, text: "Monthly Income (£)" }, stacked: true },
+        },
+        plugins: {
+          legend: { display: true },
+          tooltip: { mode: "index", intersect: false },
+        },
+      },
     });
 
-    // Annual income chart
     const annualIncomeLabels = Array.from(
       { length: decumulationResults.annualWithdrawals.length },
       (_, i) => parseInt(formData.retirementAge) + i
@@ -363,7 +387,7 @@ export default function RetirementForm() {
       datasets: [
         {
           label: "State Pension",
-          data: Array(decumulationResults.annualWithdrawals.length).fill(STATE_PENSION_ANNUAL),
+          data: decumulationResults.statePensionAnnualValues,
           backgroundColor: "rgba(0, 255, 0, 0.5)",
           borderColor: "green",
           fill: true,
@@ -617,7 +641,6 @@ export default function RetirementForm() {
         Run Simulation
       </button>
 
-      {/* Accumulation Chart and Table */}
       {accumulationChartData && accumulationTableData && (
         <div className="mt-8">
           <h3 className="text-xl font-semibold mb-4">Accumulation Phase</h3>
@@ -649,55 +672,34 @@ export default function RetirementForm() {
         </div>
       )}
 
-      {/* Decumulation Chart */}
       {decumulationChartData && (
         <div className="mt-8">
           <h3 className="text-xl font-semibold mb-4">Decumulation Phase</h3>
           <Line
             data={decumulationChartData}
-            options={{
-              scales: {
-                x: { title: { display: true, text: "Age" } },
-                y: { title: { display: true, text: "Pot Value (£)" }, stacked: true },
-              },
-              plugins: {
-                legend: { display: true },
-                tooltip: { mode: "index", intersect: false },
-              },
-            }}
+            options={decumulationChartData.options} // Use the options defined in handleCalculate
           />
         </div>
       )}
 
-      {/* Monthly Income Chart */}
       {monthlyIncomeChartData && (
         <div className="mt-8">
           <h3 className="text-xl font-semibold mb-4">Monthly Income in Retirement</h3>
           <p className="text-sm mb-2">
-            Note: State Pension is £{STATE_PENSION_ANNUAL.toLocaleString("en-US")} per year (£{STATE_PENSION_MONTHLY.toFixed(2)} per month).
+            Note: State Pension starts at £{BASE_STATE_PENSION_ANNUAL.toLocaleString("en-US")} per year (£{BASE_STATE_PENSION_MONTHLY.toFixed(2)} per month) and increases with inflation.
           </p>
           <Line
             data={monthlyIncomeChartData}
-            options={{
-              scales: {
-                x: { title: { display: true, text: "Age" } },
-                y: { title: { display: true, text: "Monthly Income (£)" }, stacked: true },
-              },
-              plugins: {
-                legend: { display: true },
-                tooltip: { mode: "index", intersect: false },
-              },
-            }}
+            options={monthlyIncomeChartData.options} // Use the options defined in handleCalculate
           />
         </div>
       )}
 
-      {/* Annual Income Chart */}
       {annualIncomeChartData && (
         <div className="mt-8">
           <h3 className="text-xl font-semibold mb-4">Annual Income in Retirement</h3>
           <p className="text-sm mb-2">
-            Note: State Pension is £{STATE_PENSION_ANNUAL.toLocaleString("en-US")} per year.
+            Note: State Pension starts at £{BASE_STATE_PENSION_ANNUAL.toLocaleString("en-US")} per year and increases with inflation.
           </p>
           <Line
             data={annualIncomeChartData}
