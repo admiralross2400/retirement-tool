@@ -20,6 +20,7 @@ export default function RetirementForm() {
     drawdownFixed: "",
     drawdownInitialPotPercentage: "",
     inflationRate: "",
+    includeStatePension: "Yes", // New option: "Yes" or "No"
   });
 
   // State to track validation errors
@@ -56,7 +57,7 @@ export default function RetirementForm() {
     "Future Advantage 5": { return: 0.053, volatility: 0.1464 },
   };
 
-  // Initial state pension values (will be adjusted by inflation in decumulation)
+  // Initial state pension values (will be adjusted by inflation in decumulation if included)
   const BASE_STATE_PENSION_ANNUAL = 11960;
   const BASE_STATE_PENSION_MONTHLY = BASE_STATE_PENSION_ANNUAL / 12; // £996.67
 
@@ -190,6 +191,7 @@ export default function RetirementForm() {
     const inflationRate = parseFloat(formData.inflationRate) / 100;
     const switchAge = parseInt(formData.ageToLowRiskFund);
     const retirementAge = parseInt(formData.retirementAge);
+    const includeStatePension = formData.includeStatePension === "Yes"; // Determine if state pension is included
     const maxMonths = (100 - retirementAge) * 12;
     let age = retirementAge;
     let months = 0;
@@ -198,8 +200,9 @@ export default function RetirementForm() {
     let currentYearWithdrawals = 0;
     let movedFunds = Array(numFunds - 1).fill(false);
     let currentDrawdownFixed = baseDrawdownFixed;
-    let currentStatePensionMonthly = BASE_STATE_PENSION_MONTHLY;
-    let currentStatePensionAnnual = BASE_STATE_PENSION_ANNUAL;
+    // Start state pension at base value if included, otherwise 0
+    let currentStatePensionMonthly = includeStatePension ? BASE_STATE_PENSION_MONTHLY : 0;
+    let currentStatePensionAnnual = includeStatePension ? BASE_STATE_PENSION_ANNUAL : 0;
     let statePensionMonthlyValues = [];
     let statePensionAnnualValues = [];
 
@@ -249,8 +252,11 @@ export default function RetirementForm() {
         if (formData.drawdownType === "fixed" || formData.drawdownType === "initialPot") {
           currentDrawdownFixed *= (1 + inflationRate);
         }
-        currentStatePensionMonthly *= (1 + inflationRate);
-        currentStatePensionAnnual *= (1 + inflationRate);
+        // Only adjust state pension if included
+        if (includeStatePension) {
+          currentStatePensionMonthly *= (1 + inflationRate);
+          currentStatePensionAnnual *= (1 + inflationRate);
+        }
       }
 
       for (let i = 0; i < numFunds; i++) {
@@ -322,7 +328,6 @@ export default function RetirementForm() {
             title: { display: true, text: "Age" },
             ticks: {
               callback: function(value, index, values) {
-                // Show only the first label of each year (every 12 months)
                 return index % 12 === 0 ? decumulationLabels[index] : '';
               },
             },
@@ -364,7 +369,6 @@ export default function RetirementForm() {
             title: { display: true, text: "Age" },
             ticks: {
               callback: function(value, index, values) {
-                // Show only the first label of each year (every 12 months)
                 return index % 12 === 0 ? monthlyIncomeLabels[index] : '';
               },
             },
@@ -596,6 +600,18 @@ export default function RetirementForm() {
               {errors.drawdownInitialPotPercentage && <p className="text-red-500 text-sm mt-1">{errors.drawdownInitialPotPercentage}</p>}
             </label>
           )}
+          <label className="block">
+            Include State Pension?:
+            <select
+              name="includeStatePension"
+              value={formData.includeStatePension}
+              onChange={handleChange}
+              className="w-full p-2 border rounded"
+            >
+              <option value="Yes">Yes</option>
+              <option value="No">No</option>
+            </select>
+          </label>
         </div>
       </div>
       <div className="mt-6 border-t pt-4">
@@ -677,7 +693,7 @@ export default function RetirementForm() {
           <h3 className="text-xl font-semibold mb-4">Decumulation Phase</h3>
           <Line
             data={decumulationChartData}
-            options={decumulationChartData.options} // Use the options defined in handleCalculate
+            options={decumulationChartData.options}
           />
         </div>
       )}
@@ -686,11 +702,13 @@ export default function RetirementForm() {
         <div className="mt-8">
           <h3 className="text-xl font-semibold mb-4">Monthly Income in Retirement</h3>
           <p className="text-sm mb-2">
-            Note: State Pension starts at £{BASE_STATE_PENSION_ANNUAL.toLocaleString("en-US")} per year (£{BASE_STATE_PENSION_MONTHLY.toFixed(2)} per month) and increases with inflation.
+            {formData.includeStatePension === "Yes" 
+              ? `Note: State Pension starts at £${BASE_STATE_PENSION_ANNUAL.toLocaleString("en-US")} per year (£${BASE_STATE_PENSION_MONTHLY.toFixed(2)} per month) and increases with inflation.`
+              : "Note: State Pension is excluded."}
           </p>
           <Line
             data={monthlyIncomeChartData}
-            options={monthlyIncomeChartData.options} // Use the options defined in handleCalculate
+            options={monthlyIncomeChartData.options}
           />
         </div>
       )}
@@ -699,7 +717,9 @@ export default function RetirementForm() {
         <div className="mt-8">
           <h3 className="text-xl font-semibold mb-4">Annual Income in Retirement</h3>
           <p className="text-sm mb-2">
-            Note: State Pension starts at £{BASE_STATE_PENSION_ANNUAL.toLocaleString("en-US")} per year and increases with inflation.
+            {formData.includeStatePension === "Yes" 
+              ? `Note: State Pension starts at £${BASE_STATE_PENSION_ANNUAL.toLocaleString("en-US")} per year and increases with inflation.`
+              : "Note: State Pension is excluded."}
           </p>
           <Line
             data={annualIncomeChartData}
