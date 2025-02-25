@@ -14,7 +14,9 @@ export default function RetirementForm() {
     contributionRate: "",
     retirementAge: "",
     fundSelection: "Future Advantage 5",
+    drawdownType: "percentage",
     drawdownPercentage: "",
+    drawdownFixed: "",
   });
 
   const [errors, setErrors] = useState({});
@@ -37,16 +39,21 @@ export default function RetirementForm() {
 
   const validateInputs = () => {
     const newErrors = {};
-    const { age, salary, currentPot, contributionRate, retirementAge, drawdownPercentage, ageToLowRiskFund } = formData;
+    const { age, salary, currentPot, contributionRate, retirementAge, drawdownType, drawdownPercentage, drawdownFixed, ageToLowRiskFund } = formData;
     const fields = [
       { name: "age", label: "Current Age", value: age },
       { name: "salary", label: "Salary", value: salary },
       { name: "currentPot", label: "Current Pot", value: currentPot },
       { name: "contributionRate", label: "Contribution Rate", value: contributionRate },
       { name: "retirementAge", label: "Retirement Age", value: retirementAge },
-      { name: "drawdownPercentage", label: "Drawdown Percentage", value: drawdownPercentage },
       { name: "ageToLowRiskFund", label: "Age to Low Risk Fund", value: ageToLowRiskFund },
     ];
+
+    if (drawdownType === "percentage") {
+      fields.push({ name: "drawdownPercentage", label: "Drawdown Percentage", value: drawdownPercentage });
+    } else {
+      fields.push({ name: "drawdownFixed", label: "Fixed Drawdown Amount", value: drawdownFixed });
+    }
 
     for (const field of fields) {
       if (!field.value || isNaN(parseFloat(field.value))) {
@@ -65,6 +72,7 @@ export default function RetirementForm() {
     const parsedCurrentPot = parseFloat(currentPot);
     const parsedContributionRate = parseFloat(contributionRate);
     const parsedDrawdownPercentage = parseFloat(drawdownPercentage);
+    const parsedDrawdownFixed = parseFloat(drawdownFixed);
     const parsedAgeToLowRiskFund = parseInt(ageToLowRiskFund);
 
     if (parsedAge <= 0) newErrors.age = "Current Age must be positive.";
@@ -73,8 +81,10 @@ export default function RetirementForm() {
     if (parsedCurrentPot < 0) newErrors.currentPot = "Current Pot cannot be negative.";
     if (parsedContributionRate <= 0 || parsedContributionRate > 100)
       newErrors.contributionRate = "Contribution Rate must be between 0 and 100%.";
-    if (parsedDrawdownPercentage <= 0 || parsedDrawdownPercentage > 100)
+    if (drawdownType === "percentage" && (parsedDrawdownPercentage <= 0 || parsedDrawdownPercentage > 100))
       newErrors.drawdownPercentage = "Drawdown Percentage must be between 0 and 100%.";
+    if (drawdownType === "fixed" && parsedDrawdownFixed <= 0)
+      newErrors.drawdownFixed = "Fixed Drawdown Amount must be positive.";
     if (parsedAgeToLowRiskFund < parsedRetirementAge)
       newErrors.ageToLowRiskFund = "Age to Low Risk Fund must be at least the Retirement Age.";
 
@@ -126,7 +136,7 @@ export default function RetirementForm() {
 
   const simulateDecumulation = (startingPot) => {
     if (!startingPot || isNaN(startingPot) || startingPot <= 0) 
-      return { lowRisk: [0], second: [0], third: [0], withdrawals: [0] };
+      return { lowRisk: [0], second: [0], third: [0], withdrawals: [0], annualWithdrawals: [0] };
 
     const lowRiskReturn = fundData[formData.lowRiskFund].return / 12;
     const secondFundReturn = fundData[formData.secondFund].return / 12;
@@ -136,7 +146,8 @@ export default function RetirementForm() {
     let potSecondFund = startingPot / 3;
     let potThirdFund = startingPot / 3;
 
-    const drawdownRate = parseFloat(formData.drawdownPercentage) / 100 /12;
+    const drawdownRate = formData.drawdownType === "percentage" ? parseFloat(formData.drawdownPercentage) / 100 / 12 : 0;
+    const drawdownFixed = formData.drawdownType === "fixed" ? parseFloat(formData.drawdownFixed) : 0;
     const switchAge = parseInt(formData.ageToLowRiskFund);
     const retirementAge = parseInt(formData.retirementAge);
     const maxMonths = (100 - retirementAge) * 12;
@@ -145,12 +156,16 @@ export default function RetirementForm() {
     let lowRiskBalances = [];
     let secondBalances = [];
     let thirdBalances = [];
-    let withdrawals = []; // Monthly withdrawals
-    let annualWithdrawals = []; // Annual totals
+    let withdrawals = [];
+    let annualWithdrawals = [];
     let currentYearWithdrawals = 0;
+    let hasMovedSecond = false;
+    let hasMovedThird = false;
 
     while (potLowRisk + potSecondFund + potThirdFund > 0 && months < maxMonths) {
-      let withdrawal = (potLowRisk + potSecondFund + potThirdFund) * drawdownRate;
+      let withdrawal = formData.drawdownType === "percentage" 
+        ? (potLowRisk + potSecondFund + potThirdFund) * drawdownRate 
+        : drawdownFixed;
       withdrawal = Math.min(withdrawal, potLowRisk);
       potLowRisk -= withdrawal;
       currentYearWithdrawals += withdrawal;
@@ -159,19 +174,47 @@ export default function RetirementForm() {
       potSecondFund = Math.max(0, potSecondFund * (1 + secondFundReturn));
       potThirdFund = Math.max(0, potThirdFund * (1 + thirdFundReturn));
 
-      if (months % 12 === 0 && months > 0) {
-        let total = potLowRisk + potSecondFund + potThirdFund;
-        potLowRisk = total / 3;
-        potSecondFund = total / 3;
-        potThirdFund = total / 3;
-        annualWithdrawals.push(currentYearWithdrawals);
-        currentYearWithdrawals = 0;
+      // Annual rebalancing
+      if (months % 12 === 11 && !hasMovedThird) {
+        if (!hasMovedSecond) {
+          // Rebalance all three funds
+          let total = potLowRisk + potSecondFund + potThirdFund;
+          potLowRisk = total / 3;
+          potSecondFund = total / 3;
+          potThirdFund = total / 3;
+        } else if (hasMovedSecond && potThirdFund > 0) {
+          // Rebalance between low-risk and third fund
+          let total = potLowRisk + potThirdFund;
+          potLowRisk = total / 2;
+          potThirdFund = total / 2;
+        }
+        // No rebalancing if hasMovedThird (all in low-risk)
       }
 
-      if (age >= switchAge || withdrawal * 12 > potLowRisk) {
+      // Sequential fund movement based on low-risk pot threshold
+      if (potLowRisk < withdrawal * 12 && !hasMovedSecond && potSecondFund > 0) {
+        potLowRisk += potSecondFund;
+        potSecondFund = 0;
+        hasMovedSecond = true;
+      } else if (potLowRisk < withdrawal * 12 && hasMovedSecond && !hasMovedThird && potThirdFund > 0) {
+        potLowRisk += potThirdFund;
+        potThirdFund = 0;
+        hasMovedThird = true;
+      }
+
+      // Override with age-based switch if applicable
+      if (age >= switchAge && (potSecondFund > 0 || potThirdFund > 0)) {
         potLowRisk += potSecondFund + potThirdFund;
         potSecondFund = 0;
         potThirdFund = 0;
+        hasMovedSecond = true;
+        hasMovedThird = true;
+      }
+
+      // Annual aggregation at the end of each year (months = 11)
+      if (months % 12 === 11) {
+        annualWithdrawals.push(currentYearWithdrawals);
+        currentYearWithdrawals = 0;
       }
 
       lowRiskBalances.push(potLowRisk);
@@ -187,9 +230,6 @@ export default function RetirementForm() {
       months++;
       age = retirementAge + Math.floor(months / 12);
     }
-
-    // Handle any remaining withdrawals in the final partial year
-    if (currentYearWithdrawals > 0) annualWithdrawals.push(currentYearWithdrawals);
 
     return { lowRisk: lowRiskBalances, second: secondBalances, third: thirdBalances, withdrawals, annualWithdrawals };
   };
@@ -250,7 +290,6 @@ export default function RetirementForm() {
       ],
     });
 
-    // Monthly Income Chart Data
     const monthlyIncomeLabels = Array.from(
       { length: decumulationResults.withdrawals.length },
       (_, i) => parseInt(formData.retirementAge) + Math.floor(i / 12)
@@ -275,7 +314,6 @@ export default function RetirementForm() {
       ],
     });
 
-    // Annual Income Chart Data
     const annualIncomeLabels = Array.from(
       { length: decumulationResults.annualWithdrawals.length },
       (_, i) => parseInt(formData.retirementAge) + i
@@ -305,7 +343,7 @@ export default function RetirementForm() {
   const [accumulationTableData, setAccumulationTableData] = useState(null);
   const [decumulationChartData, setDecumulationChartData] = useState(null);
   const [monthlyIncomeChartData, setMonthlyIncomeChartData] = useState(null);
-  const [annualIncomeChartData, setAnnualIncomeChartData] = useState(null); // New state for annual income chart
+  const [annualIncomeChartData, setAnnualIncomeChartData] = useState(null);
 
   return (
     <div className="max-w-4xl mx-auto p-6 bg-white rounded-xl shadow-md">
@@ -444,57 +482,83 @@ export default function RetirementForm() {
             {errors.ageToLowRiskFund && <p className="text-red-500 text-sm mt-1">{errors.ageToLowRiskFund}</p>}
           </label>
           <label className="block">
-            Drawdown Percentage:
-            <input
-              type="number"
-              name="drawdownPercentage"
-              value={formData.drawdownPercentage}
+            Drawdown Type:
+            <select
+              name="drawdownType"
+              value={formData.drawdownType}
               onChange={handleChange}
               className="w-full p-2 border rounded"
-            />
-            {errors.drawdownPercentage && <p className="text-red-500 text-sm mt-1">{errors.drawdownPercentage}</p>}
+            >
+              <option value="percentage">Percentage</option>
+              <option value="fixed">Fixed Amount</option>
+            </select>
           </label>
+          {formData.drawdownType === "percentage" ? (
+            <label className="block">
+              Drawdown Percentage:
+              <input
+                type="number"
+                name="drawdownPercentage"
+                value={formData.drawdownPercentage}
+                onChange={handleChange}
+                className="w-full p-2 border rounded"
+              />
+              {errors.drawdownPercentage && <p className="text-red-500 text-sm mt-1">{errors.drawdownPercentage}</p>}
+            </label>
+          ) : (
+            <label className="block">
+              Fixed Drawdown Amount (£ per month):
+              <input
+                type="number"
+                name="drawdownFixed"
+                value={formData.drawdownFixed}
+                onChange={handleChange}
+                className="w-full p-2 border rounded"
+              />
+              {errors.drawdownFixed && <p className="text-red-500 text-sm mt-1">{errors.drawdownFixed}</p>}
+            </label>
+          )}
         </div>
       </div>
       <div className="mt-6 border-t pt-4">
-  <h3 className="text-xl font-semibold mb-2">Fund Return Assumptions</h3>
-  <table className="w-full border">
-    <thead>
-      <tr>
-        <th className="border p-2">Fund</th>
-        <th className="border p-2">Annual Return (%)</th>
-        <th className="border p-2">Volatility (%)</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td className="border p-2">Future Advantage 1</td>
-        <td className="border p-2">2.5%</td>
-        <td className="border p-2">5.0%</td>
-      </tr>
-      <tr>
-        <td className="border p-2">Future Advantage 2</td>
-        <td className="border p-2">3.0%</td>
-        <td className="border p-2">5.6%</td>
-      </tr>
-      <tr>
-        <td className="border p-2">Future Advantage 3</td>
-        <td className="border p-2">3.6%</td>
-        <td className="border p-2">8.0%</td>
-      </tr>
-      <tr>
-        <td className="border p-2">Future Advantage 4</td>
-        <td className="border p-2">4.5%</td>
-        <td className="border p-2">11.5%</td>
-      </tr>
-      <tr>
-        <td className="border p-2">Future Advantage 5</td>
-        <td className="border p-2">5.3%</td>
-        <td className="border p-2">14.6%</td>
-      </tr>
-    </tbody>
-  </table>
-</div>
+        <h3 className="text-xl font-semibold mb-2">Fund Return Assumptions</h3>
+        <table className="w-full border">
+          <thead>
+            <tr>
+              <th className="border p-2">Fund</th>
+              <th className="border p-2">Annual Return (%)</th>
+              <th className="border p-2">Volatility (%)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td className="border p-2">Future Advantage 1</td>
+              <td className="border p-2">2.5%</td>
+              <td className="border p-2">5.0%</td>
+            </tr>
+            <tr>
+              <td className="border p-2">Future Advantage 2</td>
+              <td className="border p-2">3.0%</td>
+              <td className="border p-2">5.6%</td>
+            </tr>
+            <tr>
+              <td className="border p-2">Future Advantage 3</td>
+              <td className="border p-2">3.5%</td>
+              <td className="border p-2">8.0%</td>
+            </tr>
+            <tr>
+              <td className="border p-2">Future Advantage 4</td>
+              <td className="border p-2">4.5%</td>
+              <td className="border p-2">11.5%</td>
+            </tr>
+            <tr>
+              <td className="border p-2">Future Advantage 5</td>
+              <td className="border p-2">5.3%</td>
+              <td className="border p-2">14.6%</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
       <button onClick={handleCalculate} className="w-full p-2 mt-4 bg-blue-500 text-white rounded">
         Run Simulation
       </button>
