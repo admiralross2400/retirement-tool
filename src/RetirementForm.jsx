@@ -433,7 +433,7 @@ export default function RetirementForm() {
   return (
     <div className="max-w-4xl mx-auto p-6 bg-white rounded-xl shadow-md">
       <h2 className="text-2xl font-semibold mb-4 text-center">Retirement Planning Tool</h2>
-
+      <h3 className="text-xl font-semibold mb-2">Tool for demonstration purposes only - should not be considered financial advise or used for financial planning</h3>
       <div className="grid grid-cols-2 gap-8">
         <div>
           <h3 className="text-xl font-semibold mb-2">Accumulation</h3>
